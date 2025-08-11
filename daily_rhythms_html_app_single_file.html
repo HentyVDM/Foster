@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Daily Rhythms · Spiritual Disciplines Tracker</title>
+  <meta name="description" content="Track Bible reading, prayer, and other spiritual disciplines with friends. Daily rhythms + comments + notes. Everything saves in your browser.">
+  <style>
+    /* ===== Design tokens ===== */
+    :root{
+      --bg: #f8fafc;               /* slate-50 */
+      --surface: #ffffff;
+      --text: #0f172a;             /* slate-900 */
+      --muted: #64748b;            /* slate-500 */
+      --border: #e2e8f0;           /* slate-200 */
+      --ring: #cbd5e1;             /* slate-300 */
+      --primary: #4f46e5;          /* indigo-600 */
+      --primary-foreground: #ffffff;
+      --success: #16a34a;          /* green-600 */
+      --danger: #dc2626;           /* red-600 */
+      --shadow: 0 1px 2px rgba(15,23,42,0.05), 0 4px 14px rgba(15,23,42,0.06);
+    }
+    .dark{
+      --bg: #0b1220;               /* deep slate */
+      --surface: #0f172a;          /* slate-900 */
+      --text: #e2e8f0;             /* slate-200 */
+      --muted: #94a3b8;            /* slate-400 */
+      --border: #1e293b;           /* slate-800 */
+      --ring: #334155;             /* slate-700 */
+      --primary: #7c3aed;          /* violet-600 */
+      --primary-foreground: #ffffff;
+      --success: #22c55e;          /* green-500 */
+      --danger: #ef4444;           /* red-500 */
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 20px rgba(0,0,0,0.25);
+    }
+
+    /* ===== Base ===== */
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(to bottom,var(--bg),#fff);color:var(--text);font:16px/1.4 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"}
+    .container{max-width:1100px;margin-inline:auto;padding:24px}
+    h1{margin:0;font-size:28px;letter-spacing:-0.02em}
+    .muted{color:var(--muted)}
+    .stack{display:flex;flex-direction:column;gap:12px}
+
+    /* ===== Cards ===== */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow)}
+    .card header{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+    .card header h2{margin:0;font-size:16px}
+    .card .content{padding:16px 18px}
+
+    /* ===== Buttons & Inputs ===== */
+    .btn{appearance:none;border:1px solid var(--border);background:#fff;color:var(--text);border-radius:12px;padding:8px 12px;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;box-shadow:0 0 0 0 transparent;transition:0.15s}
+    .btn:hover{background:#f1f5f9}
+    .btn:focus{outline:none;box-shadow:0 0 0 3px var(--ring)}
+    .btn.secondary{background:var(--surface)}
+    .btn.primary{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+    .btn.ghost{background:transparent}
+    .btn.icon{padding:8px; width:36px; height:36px; justify-content:center}
+
+    .chip{border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--muted)}
+
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .spacer{flex:1}
+
+    input[type="text"], textarea{width:100%;background:#fff;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:8px 10px;font-size:14px;transition:0.15s}
+    textarea{min-height:80px;resize:vertical}
+    input[type="file"]{display:none}
+    .field{display:flex;flex-direction:column;gap:6px}
+
+    /* ===== Nav / Week picker ===== */
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .week{display:flex;gap:6px;align-items:center}
+    .pill{border:1px solid var(--border);border-radius:12px;padding:6px 10px;background:transparent;cursor:pointer}
+    .pill.active{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+
+    /* ===== Layout grid ===== */
+    .grid{display:grid;gap:16px}
+    @media(min-width:900px){.grid.two{grid-template-columns:1fr 1fr}}
+
+    /* ===== Toggles ===== */
+    .toggle{width:36px;height:36px;border:1px solid var(--border);border-radius:999px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:#fff}
+    .toggle.on{background:var(--success);border-color:var(--success);color:#fff}
+
+    .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:10px;padding:2px 8px;color:var(--muted)}
+
+    .note-grid{display:grid;grid-template-columns:1fr;gap:8px}
+    @media(min-width:700px){.note-grid{grid-template-columns:repeat(3,1fr)}}
+
+    .comment{border:1px solid var(--border);border-radius:12px;padding:10px}
+    .comment .meta{font-size:12px;color:var(--muted)}
+
+    .table{width:100%;border-collapse:separate;border-spacing:0}
+    .table th,.table td{padding:10px;border-top:1px solid var(--border);text-align:left;vertical-align:top}
+    .table th:first-child,.table td:first-child{padding-left:0}
+    .table th:last-child,.table td:last-child{padding-right:0}
+
+    /* Accent dots */
+    .dot{width:18px;height:18px;border:1px solid var(--border);border-radius:999px;display:inline-block;cursor:pointer}
+    .dot.active{outline:2px solid var(--primary)}
+  </style>
+</head>
+<body>
+  <div class="container" id="app"></div>
+
+  <script>
+    // ===== Utilities =====
+    const LS_KEY = 'sdtracker_html_v1';
+    const RHYTHMS = [
+      { key: 'morning', label: 'Morning', icon: '☀️' },
+      { key: 'midday', label: 'Midday', icon: '🌤️' },
+      { key: 'evening', label: 'Evening', icon: '🌙' },
+    ];
+
+    const ACCENTS = {
+      indigo: '#4f46e5', emerald: '#059669', rose: '#e11d48', amber: '#d97706', sky: '#0284c7', violet: '#7c3aed'
+    };
+
+    const fmt = (date, opts) => new Intl.DateTimeFormat(undefined, opts).format(date);
+    const startOfWeek = (d) => {
+      const date = new Date(d);
+      const day = (date.getDay() + 6) % 7; // Mon=0
+      date.setDate(date.getDate() - day); date.setHours(0,0,0,0); return date;
+    };
+    const addDays = (d, n) => { const a=new Date(d); a.setDate(a.getDate()+n); return a; };
+    const addWeeks = (d, n) => addDays(d, n*7);
+    const isSameDay = (a,b) => a.toDateString()===b.toDateString();
+    const dayKey = (d) => new Date(d).toISOString().slice(0,10);
+
+    function load(){ try{ const raw=localStorage.getItem(LS_KEY); return raw? JSON.parse(raw): null }catch{ return null } }
+    function save(state){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch{} }
+
+    // ===== State =====
+    const initial = load() || {
+      me: { id: 'me', name: 'You' },
+      friends: [{ id: 'f1', name: 'Ava' }, { id: 'f2', name: 'Noah' }],
+      disciplines: [
+        { id: 'bible', name: 'Bible Reading', emoji: '📖' },
+        { id: 'prayer', name: 'Prayer', emoji: '🙏' },
+        { id: 'journaling', name: 'Journaling', emoji: '🖊️' },
+        { id: 'silence', name: 'Silence & Solitude', emoji: '🔥' },
+      ],
+      entries: {}, // key: userId__discId__YYYY-MM-DD -> { morning,bool; midday,bool; evening,bool; notes:{morning,midday,evening} }
+      comments: {}, // key: discId__YYYY-MM-DD -> [ {id,userId,userName,text,ts,likes} ]
+      prefs: { dark: false, accent: 'indigo' },
+      selected: new Date(),
+      activeTab: 'today',
+      onlyMe: false,
+    };
+
+    let state = deepClone(initial);
+
+    function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+
+    function applyTheme(){
+      const root = document.documentElement;
+      root.style.setProperty('--primary', ACCENTS[state.prefs.accent] || ACCENTS.indigo);
+      if(state.prefs.dark){ root.classList.add('dark'); } else { root.classList.remove('dark'); }
+    }
+
+    // ===== Derived =====
+    const weekDays = (selected) => {
+      const sow = startOfWeek(selected);
+      return Array.from({length:7},(_,i)=> addDays(sow,i));
+    };
+
+    function getEntry(userId, dId, dk){
+      const key = `${userId}__${dId}__${dk}`;
+      return state.entries[key] || { morning:false, midday:false, evening:false, notes:{morning:'',midday:'',evening:''} };
+    }
+    function setEntry(userId, dId, dk, partial){
+      const key = `${userId}__${dId}__${dk}`;
+      const prev = getEntry(userId,dId,dk);
+      state.entries[key] = Object.assign({}, prev, partial, {
+        notes: Object.assign({}, prev.notes, partial.notes||{})
+      });
+    }
+
+    function streakFor(dId){
+      let streak=0; const today=new Date();
+      for(let i=0;i<365;i++){
+        const dk=dayKey(addDays(today,-i));
+        const e=getEntry(state.me.id,dId,dk);
+        if(e.morning||e.midday||e.evening) streak++; else break;
+      }
+      return streak;
+    }
+
+    // ===== Rendering =====
+    function render(){
+      applyTheme();
+      save(state);
+      const days = weekDays(new Date(state.selected));
+      const selectedKey = dayKey(state.selected);
+      const people = [state.me, ...(state.onlyMe? []: state.friends)];
+
+      const header = `
+        <div class="row" style="justify-content:space-between; margin-bottom:16px">
+          <div class="row" style="gap:12px">
+            <div style="width:40px;height:40px;border-radius:14px;background:color-mix(in lab, var(--primary) 12%, transparent);display:flex;align-items:center;justify-content:center">📖</div>
+            <div>
+              <h1>Daily Rhythms</h1>
+              <div class="muted" style="font-size:13px">Track Scripture, prayer, and more with friends.</div>
+            </div>
+          </div>
+          <div class="toolbar">
+            <div class="row card" style="padding:6px 8px">
+              <button class="btn ghost" data-action="shift-week" data-delta="-1">-1w</button>
+              <div class="chip">Week of ${fmt(startOfWeek(state.selected), {month:'short', day:'numeric', year:'numeric'})}</div>
+              <button class="btn ghost" data-action="shift-week" data-delta="1">+1w</button>
+            </div>
+            <div class="week">
+              ${days.map(d=>`
+                <button class="pill ${isSameDay(d,state.selected)?'active':''}" data-action="select-day" data-date="${d.toISOString()}">
+                  <div style="font-size:12px;opacity:.8">${fmt(d,{weekday:'short'})}</div>
+                  <div style="font-weight:600;margin-top:-2px">${fmt(d,{day:'numeric'})}</div>
+                </button>
+              `).join('')}
+            </div>
+            <button class="btn secondary" data-action="today">Today</button>
+            <button class="btn icon ghost" title="Toggle dark mode" data-action="toggle-dark">${state.prefs.dark? '☀️':'🌙'}</button>
+            <div class="row">
+              ${Object.entries(ACCENTS).map(([k,v])=>`<span class="dot ${state.prefs.accent===k?'active':''}" style="background:${v}" data-action="accent" data-accent="${k}"></span>`).join('')}
+            </div>
+          </div>
+        </div>`;
+
+      const tabs = `
+        <div class="row" style="margin:8px 0 16px">
+          ${['today','week','feed','settings'].map(t=>`<button class="btn ${state.activeTab===t? 'primary': ''}" data-action="tab" data-tab="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join(' ')}
+        </div>`;
+
+      const todayLeft = `
+        <div class="card">
+          <header><h2>Today · ${fmt(state.selected,{weekday:'short', month:'short', day:'numeric'})}</h2></header>
+          <div class="content stack">
+            ${state.disciplines.map(d=>{
+              const e = getEntry(state.me.id, d.id, selectedKey);
+              return `
+              <div class="card" style="border-radius:12px">
+                <div class="content">
+                  <div class="row" style="justify-content:space-between">
+                    <div class="row" style="gap:8px"><span style="font-size:18px">${d.emoji||'🎯'}</span> <strong>${d.name}</strong></div>
+                    <div class="row">
+                      ${RHYTHMS.map(r=>`
+                        <span class="badge" style="display:none;" data-hide-on-small>${r.label}</span>
+                        <button class="toggle ${e[r.key]?'on':''}" title="${r.label}" data-action="toggle" data-user="${state.me.id}" data-disc="${d.id}" data-day="${selectedKey}" data-rhythm="${r.key}">${r.icon}</button>
+                      `).join('')}
+                    </div>
+                  </div>
+
+                  <details style="margin-top:10px">
+                    <summary class="muted" style="cursor:pointer">Add details for ${d.name}</summary>
+                    <div class="note-grid" style="margin-top:10px">
+                      ${RHYTHMS.map(r=>`
+                        <div class="field">
+                          <label class="muted" style="font-size:12px">${r.label} notes</label>
+                          <textarea data-action="note" data-user="${state.me.id}" data-disc="${d.id}" data-day="${selectedKey}" data-rhythm="${r.key}" placeholder="What passage, what you prayed, etc.">${e.notes?.[r.key]||''}</textarea>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </details>
+
+                  ${commentsBlock(d.id, selectedKey)}
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+
+      const todayRight = `
+        <div class="card">
+          <header><h2>Friends · Today</h2></header>
+          <div class="content">
+            <div class="row" style="justify-content:space-between; margin-bottom:10px">
+              <div class="muted" style="font-size:14px">See how everyone is doing today.</div>
+              <label class="row" style="gap:6px; font-size:14px"><span>Only me</span>
+                <input type="checkbox" ${state.onlyMe? 'checked':''} data-action="only-me" />
+              </label>
+            </div>
+            <div class="stack">
+              ${people.map(p=>`
+                <div class="card" style="border-radius:12px">
+                  <div class="content" style="padding:10px 12px">
+                    <div style="font-weight:600;margin-bottom:6px">${p.name}</div>
+                    ${state.disciplines.map(d=>{
+                      const e=getEntry(p.id,d.id,selectedKey);
+                      return `<div class="row" style="justify-content:space-between; padding:6px 0">
+                        <div class="row" style="gap:8px"><span>${d.emoji||'🎯'}</span> ${d.name}</div>
+                        <div class="row">
+                          ${RHYTHMS.map(r=>`<button class="toggle ${e[r.key]?'on':''}" title="${r.label}" data-action="toggle" data-user="${p.id}" data-disc="${d.id}" data-day="${selectedKey}" data-rhythm="${r.key}">${r.icon}</button>`).join('')}
+                        </div>`+ (p.id===state.me.id? '' : '') + `
+                      </div>`;
+                    }).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>`;
+
+      const today = `<div class="grid two">${todayLeft}${todayRight}</div>`;
+
+      const week = `
+        <div class="card">
+          <header><h2>Weekly Rhythm · ${fmt(weekDays(state.selected)[0],{month:'short',day:'numeric'})} – ${fmt(weekDays(state.selected)[6],{month:'short',day:'numeric',year:'numeric'})}</h2></header>
+          <div class="content">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Discipline</th>
+                  ${weekDays(state.selected).map(d=>`<th>${fmt(d,{weekday:'short'})}<div class="muted" style="font-size:12px">${fmt(d,{month:'short',day:'numeric'})}</div></th>`).join('')}
+                  <th>Streak</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.disciplines.map(d=>`
+                  <tr>
+                    <td><div class="row" style="gap:6px;align-items:center"><span>${d.emoji||'🎯'}</span><strong>${d.name}</strong></div></td>
+                    ${weekDays(state.selected).map(day=>{
+                      const dk = dayKey(day);
+                      const e = getEntry(state.me.id,d.id,dk);
+                      const count = ['morning','midday','evening'].filter(k=>e[k]).length;
+                      return `<td>
+                        <div class="row">
+                          ${RHYTHMS.map(r=>`<button class="toggle ${e[r.key]?'on':''}" data-action="toggle" data-user="${state.me.id}" data-disc="${d.id}" data-day="${dk}" data-rhythm="${r.key}">${r.icon}</button>`).join('')}
+                        </div>
+                        <div class="muted" style="font-size:12px;margin-top:6px">✔️ ${count}/3</div>
+                      </td>`
+                    }).join('')}
+                    <td><span class="chip">🔥 ${streakFor(d.id)} days</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+
+      const feed = `
+        <div class="card">
+          <header><h2>Community Feed</h2></header>
+          <div class="content stack">
+            ${feedItems().length===0 ? `<div class="muted">No posts yet. Share an encouragement or reflection from Today.</div>` : ''}
+            ${feedItems().map(it=>{
+              const [dId, dk] = it.key.split('__');
+              const disc = state.disciplines.find(x=>x.id===dId);
+              return `<div class="comment">
+                <div class="meta">${new Date(it.ts).toLocaleString()} · ${new Date(dk).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}</div>
+                <div class="row" style="gap:6px; align-items:center; margin:6px 0"><span>${disc?.emoji||'🎯'}</span><strong>${it.userName}</strong> in ${disc? disc.name: dId}</div>
+                <div style="white-space:pre-wrap">${escapeHtml(it.text)}</div>
+                <div class="row" style="margin-top:6px">
+                  <button class="btn ghost" data-action="like" data-disc="${dId}" data-day="${dk}" data-id="${it.id}">❤️ ${it.likes||0}</button>
+                </div>
+              </div>`
+            }).join('')}
+          </div>
+        </div>`;
+
+      const settings = `
+        <div class="grid two">
+          <div class="card">
+            <header><h2>Profile & Group</h2></header>
+            <div class="content stack">
+              <div class="field">
+                <label class="muted">Your name</label>
+                <input type="text" value="${escapeAttr(state.me.name)}" data-action="me-name" />
+              </div>
+              <hr style="border:none;border-top:1px solid var(--border)">
+              <div class="field">
+                <label class="muted" style="font-weight:600">Friends</label>
+                <div class="row">
+                  <input type="text" placeholder="Add a friend by name" id="friend-input">
+                  <button class="btn" data-action="add-friend">Add</button>
+                </div>
+                <div class="stack">
+                  ${state.friends.map(f=>`<div class="row card" style="padding:8px 10px; justify-content:space-between"><div>${f.name}</div><button class="btn icon ghost" data-action="remove-friend" data-id="${f.id}">🗑️</button></div>`).join('')}
+                  ${state.friends.length===0? `<div class="muted">No friends added yet.</div>`:''}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <header><h2>Disciplines</h2></header>
+            <div class="content stack">
+              <div class="row">
+                <input type="text" placeholder="Add a new discipline (e.g., Fasting)" id="disc-input">
+                <input type="text" placeholder="Emoji (optional)" id="disc-emoji" style="width:120px">
+                <button class="btn" data-action="add-disc">Add</button>
+              </div>
+              <div class="stack">
+                ${state.disciplines.map(d=>`<div class="row card" style="padding:8px 10px; justify-content:space-between"><div class="row" style="gap:8px"><span>${d.emoji||'🎯'}</span>${d.name}</div><button class="btn icon ghost" data-action="remove-disc" data-id="${d.id}">🗑️</button></div>`).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="grid-column:1/-1">
+            <header><h2>Theme & Data</h2></header>
+            <div class="content stack">
+              <div class="row" style="justify-content:space-between">
+                <div>Dark mode</div>
+                <label class="row" style="gap:6px"><input type="checkbox" ${state.prefs.dark? 'checked':''} data-action="toggle-dark"> Dark</label>
+              </div>
+              <div>
+                <div class="muted" style="margin-bottom:6px">Accent color</div>
+                <div class="row">
+                  ${Object.entries(ACCENTS).map(([k,v])=>`<span class="dot ${state.prefs.accent===k?'active':''}" style="background:${v}" data-action="accent" data-accent="${k}"></span>`).join('')}
+                </div>
+              </div>
+              <div class="row">
+                <button class="btn" data-action="export">Export JSON</button>
+                <label class="btn" style="cursor:pointer">
+                  <input type="file" accept="application/json" id="import-file">
+                  Import JSON
+                </label>
+                <button class="btn ghost" data-action="reset">Reset all data</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+      const main = state.activeTab==='today'? today : state.activeTab==='week'? week : state.activeTab==='feed'? feed : settings;
+
+      document.getElementById('app').innerHTML = header + tabs + main + '<footer class="muted" style="margin-top:20px;text-align:center;font-size:12px">Built for small groups and friends. Your data stays in your browser.</footer>';
+
+      // wire import
+      const importEl = document.getElementById('import-file');
+      if(importEl){ importEl.onchange = (e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload = ()=>{ try{ const data=JSON.parse(r.result); state = Object.assign({}, state, data); render(); }catch{ alert('Import failed. Invalid file.'); } }; r.readAsText(f); } }
+
+      // focus helpers
+      const friendInput = document.getElementById('friend-input');
+      if(friendInput){ friendInput.onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); document.querySelector('[data-action="add-friend"]').click(); } } };
+      const discInput = document.getElementById('disc-input');
+      if(discInput){ discInput.onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); document.querySelector('[data-action="add-disc"]').click(); } } };
+    }
+
+    function commentsBlock(dId, dk){
+      const list = state.comments[`${dId}__${dk}`] || [];
+      return `
+        <div style="margin-top:12px">
+          <div class="row" style="gap:6px; align-items:center; font-size:14px"><span>💬</span><strong>Comments</strong></div>
+          <div class="stack" style="margin-top:8px">
+            ${list.map(c=>`<div class="comment"><div class="row" style="justify-content:space-between"><div style="font-weight:600;font-size:14px">${c.userName}</div><div class="meta">${new Date(c.ts).toLocaleString()}</div></div><div style="margin-top:4px;white-space:pre-wrap">${escapeHtml(c.text)}</div><div class="row" style="gap:8px; margin-top:6px"><button class="btn ghost" data-action="like" data-disc="${dId}" data-day="${dk}" data-id="${c.id}">❤️ ${c.likes||0}</button>${c.userId==='me'? `<button class="btn ghost" data-action="del-comment" data-disc="${dId}" data-day="${dk}" data-id="${c.id}">🗑️ Delete</button>`:''}</div></div>`).join('')}
+          </div>
+          <div class="row" style="gap:8px; margin-top:8px">
+            <textarea placeholder="Share a reflection, prayer request, or encouragement…" id="comment-${dId}-${dk}"></textarea>
+            <button class="btn" data-action="post" data-disc="${dId}" data-day="${dk}">Post</button>
+          </div>
+        </div>`;
+    }
+
+    function feedItems(){
+      return Object.entries(state.comments).flatMap(([key, list])=> list.map(c=>({key, ...c}))).sort((a,b)=> new Date(b.ts) - new Date(a.ts));
+    }
+
+    function escapeHtml(s=''){ return s.replace(/[&<>"]g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+    function escapeAttr(s=''){ return (''+s).replace(/"/g,'&quot;'); }
+
+    // ===== Events (delegated) =====
+    document.addEventListener('click', (e)=>{
+      const el = e.target.closest('[data-action]'); if(!el) return;
+      const act = el.dataset.action;
+      if(act==='shift-week'){
+        const delta = Number(el.dataset.delta)||0; state.selected = addWeeks(new Date(state.selected), delta); render();
+      } else if(act==='select-day'){
+        state.selected = new Date(el.dataset.date); render();
+      } else if(act==='today'){
+        state.selected = new Date(); render();
+      } else if(act==='tab'){
+        state.activeTab = el.dataset.tab; render();
+      } else if(act==='toggle'){
+        const {user, disc, day, rhythm} = el.dataset;
+        const e0 = getEntry(user, disc, day); e0[rhythm] = !e0[rhythm]; setEntry(user,disc,day,e0); render();
+      } else if(act==='only-me'){
+        state.onlyMe = !state.onlyMe; render();
+      } else if(act==='post'){
+        const {disc, day} = el.dataset; const ta = document.getElementById(`comment-${disc}-${day}`);
+        const text = (ta?.value||'').trim(); if(!text) return; const key = `${disc}__${day}`;
+        const c = { id: Date.now()+"_"+Math.random().toString(36).slice(2,7), userId: state.me.id, userName: state.me.name, text, ts: new Date().toISOString(), likes:0 };
+        state.comments[key] = [...(state.comments[key]||[]), c]; ta.value=''; render();
+      } else if(act==='like'){
+        const {disc, day, id} = el.dataset; const key = `${disc}__${day}`;
+        state.comments[key] = (state.comments[key]||[]).map(c=> c.id===id? {...c, likes:(c.likes||0)+1}: c); render();
+      } else if(act==='del-comment'){
+        const {disc, day, id} = el.dataset; const key = `${disc}__${day}`;
+        state.comments[key] = (state.comments[key]||[]).filter(c=> c.id!==id); render();
+      } else if(act==='add-friend'){
+        const input = document.getElementById('friend-input'); const name = (input?.value||'').trim(); if(!name) return;
+        state.friends.push({ id: name.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'-'+Math.random().toString(36).slice(2,5), name }); input.value=''; render();
+      } else if(act==='remove-friend'){
+        const id = el.dataset.id; state.friends = state.friends.filter(f=> f.id!==id); render();
+      } else if(act==='add-disc'){
+        const nameEl = document.getElementById('disc-input'); const emojiEl = document.getElementById('disc-emoji');
+        const name = (nameEl?.value||'').trim(); if(!name) return; const emoji=(emojiEl?.value||'').trim();
+        const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'-'); state.disciplines = [{ id, name, ...(emoji? {emoji}:{}) }, ...state.disciplines]; nameEl.value=''; emojiEl.value=''; render();
+      } else if(act==='remove-disc'){
+        const id = el.dataset.id; state.disciplines = state.disciplines.filter(d=> d.id!==id); render();
+      } else if(act==='export'){
+        const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`spiritual-tracker-export-${dayKey(new Date())}.json`; a.click(); URL.revokeObjectURL(url);
+      } else if(act==='reset'){
+        if(confirm('Reset everything? This clears your data on this device.')){ state = deepClone(initial); render(); }
+      } else if(act==='toggle-dark'){
+        state.prefs.dark = !state.prefs.dark; render();
+      } else if(act==='accent'){
+        state.prefs.accent = el.dataset.accent || 'indigo'; render();
+      }
+    });
+
+    document.addEventListener('input', (e)=>{
+      const el = e.target.closest('[data-action]'); if(!el) return;
+      if(el.dataset.action==='note'){
+        const {user, disc, day, rhythm} = el.dataset; const val = el.value;
+        const prev = getEntry(user, disc, day); setEntry(user,disc,day, { notes: {[rhythm]: val} }); save(state); // live save
+      } else if(el.dataset.action==='me-name'){
+        state.me.name = el.value; save(state);
+      }
+    });
+
+    // init
+    render();
+  </script>
+</body>
+</html>
