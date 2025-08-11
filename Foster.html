@@ -1,0 +1,775 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { format, startOfWeek, addDays, isSameDay, parseISO, addWeeks, subWeeks } from "date-fns";
+import { 
+  CheckCircle2,
+  MessageCircle,
+  Plus,
+  CalendarDays,
+  Users,
+  BookOpen,
+  Heart,
+  Download,
+  Upload,
+  Sun,
+  Moon,
+  CloudSun,
+  Trash2,
+  Edit3,
+  Target,
+  Flame,
+  RotateCcw,
+  Palette
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+
+/**
+ * Spiritual Disciplines Tracker
+ * ---------------------------------------------------------
+ * Single-file React app using Tailwind + shadcn/ui.
+ * Tracks daily rhythms (morning/midday/evening) for disciplines
+ * like Bible reading & prayer, with comments + simple group feed.
+ * Data persists in localStorage and can be exported/imported.
+ *
+ * New in this version:
+ * - Custom disciplines with optional emoji icon
+ * - Dark mode toggle + accent color themes (persisted)
+ */
+
+// --- Types ---
+const RHYTHMS = [
+  { key: "morning", label: "Morning", icon: Sun },
+  { key: "midday", label: "Midday", icon: CloudSun },
+  { key: "evening", label: "Evening", icon: Moon },
+];
+
+// Starter disciplines (editable)
+const DEFAULT_DISCIPLINES = [
+  { id: "bible", name: "Bible Reading", icon: BookOpen },
+  { id: "prayer", name: "Prayer", icon: Target },
+  { id: "journaling", name: "Journaling", icon: Edit3 },
+  { id: "silence", name: "Silence & Solitude", icon: Flame },
+];
+
+// Accent palettes (primary + foreground)
+const ACCENTS = {
+  indigo: { primary: "#4f46e5", foreground: "#ffffff" },
+  emerald: { primary: "#059669", foreground: "#ffffff" },
+  rose: { primary: "#e11d48", foreground: "#ffffff" },
+  amber: { primary: "#d97706", foreground: "#111111" },
+  sky: { primary: "#0284c7", foreground: "#ffffff" },
+  violet: { primary: "#7c3aed", foreground: "#ffffff" },
+};
+
+// --- localStorage helpers ---
+const LS_KEY = "spiritual-disciplines-tracker:v1";
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn("Failed to load data", e);
+    return null;
+  }
+}
+
+function saveData(state) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn("Failed to save data", e);
+  }
+}
+
+// --- Utilities ---
+function startOfWeekISO(date) {
+  return startOfWeek(date, { weekStartsOn: 1 }); // Monday
+}
+
+function getWeekDays(baseDate) {
+  const sow = startOfWeekISO(baseDate);
+  return Array.from({ length: 7 }, (_, i) => addDays(sow, i));
+}
+
+function dateKey(date) {
+  return format(date, "yyyy-MM-dd");
+}
+
+function todayKey() {
+  return dateKey(new Date());
+}
+
+function classNames(...cls) {
+  return cls.filter(Boolean).join(" ");
+}
+
+function applyAccent(name) {
+  const theme = ACCENTS[name] || ACCENTS.indigo;
+  const root = document.documentElement;
+  root.style.setProperty("--primary", theme.primary);
+  root.style.setProperty("--primary-foreground", theme.foreground);
+}
+
+function applyDarkMode(on) {
+  const root = document.documentElement;
+  if (on) root.classList.add("dark"); else root.classList.remove("dark");
+}
+
+function IconOrEmoji({ d, className = "h-5 w-5" }) {
+  if (d.emoji) return <span className="text-lg" aria-hidden>{d.emoji}</span>;
+  const Icon = d.icon || Target;
+  return <Icon className={className} />;
+}
+
+// --- Main App ---
+export default function App() {
+  // Core state
+  const [me, setMe] = useState({ id: "me", name: "You" });
+  const [friends, setFriends] = useState([
+    { id: "f1", name: "Ava" },
+    { id: "f2", name: "Noah" },
+  ]);
+  const [disciplines, setDisciplines] = useState(DEFAULT_DISCIPLINES);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [entries, setEntries] = useState({});
+  const [comments, setComments] = useState({});
+  const [activeTab, setActiveTab] = useState("today");
+  const [showOnlyMine, setShowOnlyMine] = useState(false);
+  const [prefs, setPrefs] = useState({ darkMode: false, accent: "indigo" });
+
+  // Load / Save
+  useEffect(() => {
+    const data = loadData();
+    if (data) {
+      setMe(data.me || { id: "me", name: "You" });
+      setFriends(data.friends || []);
+      setDisciplines(data.disciplines?.length ? data.disciplines : DEFAULT_DISCIPLINES);
+      setEntries(data.entries || {});
+      setComments(data.comments || {});
+      setPrefs(data.prefs || { darkMode: false, accent: "indigo" });
+    }
+  }, []);
+
+  useEffect(() => {
+    saveData({ me, friends, disciplines, entries, comments, prefs });
+  }, [me, friends, disciplines, entries, comments, prefs]);
+
+  // Apply theme changes
+  useEffect(() => {
+    applyAccent(prefs.accent);
+    applyDarkMode(prefs.darkMode);
+  }, [prefs]);
+
+  const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
+
+  // Derived helpers
+  function getEntry(userId, dId, dayKey) {
+    const key = `${userId}__${dId}__${dayKey}`;
+    return entries[key] || { morning: false, midday: false, evening: false };
+  }
+
+  function setEntry(userId, dId, dayKey, partial) {
+    const key = `${userId}__${dId}__${dayKey}`;
+    setEntries((prev) => ({ ...prev, [key]: { ...getEntry(userId, dId, dayKey), ...partial } }));
+  }
+
+  function toggleRhythm(userId, dId, dayKey, rhythmKey) {
+    const prev = getEntry(userId, dId, dayKey);
+    setEntry(userId, dId, dayKey, { [rhythmKey]: !prev[rhythmKey] });
+  }
+
+  function addComment(dayKey, dId, user, text) {
+    const key = `${dId}__${dayKey}`;
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newC = { id, userId: user.id, userName: user.name, text, ts: new Date().toISOString(), likes: 0 };
+    setComments((prev) => ({ ...prev, [key]: [...(prev[key] || []), newC] }));
+  }
+
+  function likeComment(dayKey, dId, id) {
+    const key = `${dId}__${dayKey}`;
+    setComments((prev) => ({
+      ...prev,
+      [key]: (prev[key] || []).map((c) => (c.id === id ? { ...c, likes: (c.likes || 0) + 1 } : c)),
+    }));
+  }
+
+  function deleteComment(dayKey, dId, id) {
+    const key = `${dId}__${dayKey}`;
+    setComments((prev) => ({ ...prev, [key]: (prev[key] || []).filter((c) => c.id !== id) }));
+  }
+
+  // Streak calculation per discipline for current user
+  function getStreak(dId) {
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; i < 365; i++) {
+      const d = addDays(today, -i);
+      const key = dateKey(d);
+      const e = getEntry(me.id, dId, key);
+      const done = RHYTHMS.some((r) => e[r.key]);
+      if (done) streak += 1; else break;
+    }
+    return streak;
+  }
+
+  const weekCompletion = useMemo(() => {
+    const map = {};
+    disciplines.forEach((d) => {
+      map[d.id] = weekDays.map((day) => {
+        const e = getEntry(me.id, d.id, dateKey(day));
+        return RHYTHMS.filter((r) => e[r.key]).length;
+      });
+    });
+    return map; // { [dId]: [count each day] }
+  }, [disciplines, weekDays, entries, me.id]);
+
+  function exportData() {
+    const payload = { me, friends, disciplines, entries, comments, prefs };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `spiritual-tracker-export-${todayKey()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importData(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data) return;
+        setMe(data.me || me);
+        setFriends(Array.isArray(data.friends) ? data.friends : friends);
+        setDisciplines(Array.isArray(data.disciplines) ? data.disciplines : disciplines);
+        setEntries(data.entries || entries);
+        setComments(data.comments || comments);
+        setPrefs(data.prefs || prefs);
+      } catch (err) {
+        alert("Import failed. Invalid file.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // UI helpers
+  function DayPill({ day, onClick }) {
+    const selected = isSameDay(day, selectedDate);
+    return (
+      <button
+        onClick={onClick}
+        className={classNames(
+          "px-3 py-2 rounded-xl border transition-all",
+          selected ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
+        )}
+        title={format(day, "cccc, MMM d")}
+      >
+        <div className="text-xs opacity-80">{format(day, "EEE")}</div>
+        <div className="font-semibold -mt-0.5">{format(day, "d")}</div>
+      </button>
+    );
+  }
+
+  function RhythmToggle({ checked, onChange, Icon }) {
+    return (
+      <button
+        onClick={onChange}
+        className={classNames(
+          "h-9 w-9 rounded-full flex items-center justify-center border",
+          checked ? "bg-green-600 text-white border-green-600" : "hover:bg-muted"
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </button>
+    );
+  }
+
+  function DisciplineRow({ d, dayKey, user }) {
+    const entry = getEntry(user.id, d.id, dayKey);
+    return (
+      <div className="flex items-center justify-between gap-3 py-2">
+        <div className="flex items-center gap-3">
+          <IconOrEmoji d={d} className="h-5 w-5 opacity-80" />
+          <div>
+            <div className="font-medium">{d.name}</div>
+            <div className="text-xs text-muted-foreground">{user.name}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {RHYTHMS.map((r) => (
+            <RhythmToggle
+              key={r.key}
+              checked={!!entry[r.key]}
+              onChange={() => toggleRhythm(user.id, d.id, dayKey, r.key)}
+              Icon={r.icon}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function Comments({ d, dayKey }) {
+    const [text, setText] = useState("");
+    const key = `${d.id}__${dayKey}`;
+    const list = comments[key] || [];
+    return (
+      <div className="mt-4">
+        <div className="text-sm font-medium mb-2 flex items-center gap-2"><MessageCircle className="h-4 w-4"/> Comments</div>
+        <div className="space-y-3">
+          <AnimatePresence initial={false}>
+            {list.map((c) => (
+              <motion.div
+                key={c.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="rounded-xl border p-3"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">{c.userName}</div>
+                  <div className="text-xs text-muted-foreground">{format(parseISO(c.ts), "MMM d, HH:mm")}</div>
+                </div>
+                <div className="text-sm mt-1 whitespace-pre-wrap">{c.text}</div>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button size="sm" variant="ghost" onClick={() => likeComment(dayKey, d.id, c.id)}>
+                    <Heart className="h-4 w-4 mr-1"/>{c.likes || 0}
+                  </Button>
+                  {(c.userId === me.id) && (
+                    <Button size="sm" variant="ghost" onClick={() => deleteComment(dayKey, d.id, c.id)}>
+                      <Trash2 className="h-4 w-4 mr-1"/>Delete
+                    </Button>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Share a reflection, prayer request, or encouragement…"
+            className="min-h-[80px]"
+          />
+          <Button onClick={() => { if (text.trim()) { addComment(dayKey, d.id, me, text.trim()); setText(""); } }}>
+            <MessageCircle className="h-4 w-4 mr-2"/> Post
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  function TodayView() {
+    const dayKeyStr = dateKey(selectedDate);
+    const people = [me, ...(showOnlyMine ? [] : friends)];
+    return (
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5"/> Today · {format(selectedDate, "EEE, MMM d")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {disciplines.map((d) => (
+                <div key={d.id} className="rounded-xl border p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <IconOrEmoji d={d} className="h-5 w-5"/>
+                      <div className="font-semibold">{d.name}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {RHYTHMS.map((r) => (
+                        <div key={r.key} className="flex items-center gap-1">
+                          <Badge variant="secondary" className="hidden sm:inline-flex">{r.label}</Badge>
+                          <RhythmToggle
+                            checked={!!getEntry(me.id, d.id, dayKeyStr)[r.key]}
+                            onChange={() => toggleRhythm(me.id, d.id, dayKeyStr, r.key)}
+                            Icon={r.icon}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Comments d={d} dayKey={dayKeyStr} />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5"/> Friends · Today</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm text-muted-foreground">See how everyone is doing today.</div>
+              <div className="flex items-center gap-2 text-sm">
+                <span>Only me</span>
+                <Switch checked={showOnlyMine} onCheckedChange={setShowOnlyMine}/>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {people.map((p) => (
+                <div key={p.id} className="rounded-xl border p-3">
+                  <div className="font-medium mb-2">{p.name}</div>
+                  {disciplines.map((d) => (
+                    <DisciplineRow key={`${p.id}-${d.id}`} d={d} dayKey={dayKeyStr} user={p} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  function WeekView() {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Weekly Rhythm · {format(weekDays[0], "MMM d")} – {format(weekDays[6], "MMM d, yyyy")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th className="p-2">Discipline</th>
+                  {weekDays.map((d, i) => (
+                    <th key={i} className="p-2 min-w-[100px]">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{format(d, "EEE")}</span>
+                        <span className="text-xs text-muted-foreground">{format(d, "MMM d")}</span>
+                      </div>
+                    </th>
+                  ))}
+                  <th className="p-2">Streak</th>
+                </tr>
+              </thead>
+              <tbody>
+                {disciplines.map((d) => (
+                  <tr key={d.id} className="border-t">
+                    <td className="p-2 font-medium">
+                      <div className="flex items-center gap-2"><IconOrEmoji d={d} className="h-4 w-4"/>{d.name}</div>
+                    </td>
+                    {weekDays.map((day, i) => {
+                      const e = getEntry(me.id, d.id, dateKey(day));
+                      const count = RHYTHMS.filter((r) => e[r.key]).length;
+                      return (
+                        <td key={i} className="p-2">
+                          <div className="flex items-center gap-2">
+                            {RHYTHMS.map((r) => (
+                              <RhythmToggle
+                                key={r.key}
+                                checked={!!e[r.key]}
+                                onChange={() => toggleRhythm(me.id, d.id, dateKey(day), r.key)}
+                                Icon={r.icon}
+                              />
+                            ))}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3"/> {count}/3
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td className="p-2">
+                      <Badge variant="secondary">🔥 {getStreak(d.id)} days</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function FeedView() {
+    const items = Object.entries(comments)
+      .flatMap(([key, list]) => list.map((c) => ({ key, ...c })))
+      .sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Community Feed</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {items.length === 0 && <div className="text-sm text-muted-foreground">No posts yet. Share an encouragement or reflection from Today.</div>}
+            {items.map((it) => {
+              const [dId, dayKey] = it.key.split("__");
+              const d = disciplines.find((x) => x.id === dId);
+              return (
+                <div key={it.id} className="rounded-xl border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">{format(parseISO(it.ts), "MMM d, HH:mm")} · {format(parseISO(dayKey), "EEE, MMM d")}</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    {d && <IconOrEmoji d={d} className="h-4 w-4"/>}
+                    <div className="font-medium">{it.userName} in {d ? d.name : dId}</div>
+                  </div>
+                  <div className="text-sm whitespace-pre-wrap">{it.text}</div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Button size="sm" variant="ghost" onClick={() => likeComment(dayKey, dId, it.id)}>
+                      <Heart className="h-4 w-4 mr-1"/>{it.likes || 0}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function SettingsView() {
+    const [newDisc, setNewDisc] = useState("");
+    const [newDiscEmoji, setNewDiscEmoji] = useState("");
+    const [newFriend, setNewFriend] = useState("");
+
+    function addDisc() {
+      const name = newDisc.trim();
+      if (!name) return;
+      const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const emoji = newDiscEmoji.trim();
+      setDisciplines((prev) => [{ id, name, ...(emoji ? { emoji } : { icon: Target }) }, ...prev]);
+      setNewDisc("");
+      setNewDiscEmoji("");
+    }
+
+    function addFriend() {
+      const name = newFriend.trim();
+      if (!name) return;
+      const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Math.random().toString(36).slice(2, 5);
+      setFriends((prev) => [...prev, { id, name }]);
+      setNewFriend("");
+    }
+
+    function resetAll() {
+      if (!confirm("Reset everything? This clears your data on this device.")) return;
+      setMe({ id: "me", name: "You" });
+      setFriends([]);
+      setDisciplines(DEFAULT_DISCIPLINES);
+      setEntries({});
+      setComments({});
+      setPrefs({ darkMode: false, accent: "indigo" });
+    }
+
+    return (
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile & Group</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <div className="text-sm mb-1">Your name</div>
+              <Input value={me.name} onChange={(e) => setMe({ ...me, name: e.target.value })} />
+            </div>
+
+            <Separator />
+
+            <div>
+              <div className="text-sm font-medium mb-2">Friends</div>
+              <div className="flex items-center gap-2 mb-2">
+                <Input placeholder="Add a friend by name" value={newFriend} onChange={(e) => setNewFriend(e.target.value)} />
+                <Button onClick={addFriend}><Plus className="h-4 w-4 mr-1"/>Add</Button>
+              </div>
+              <div className="space-y-2">
+                {friends.map((f) => (
+                  <div key={f.id} className="flex items-center justify-between rounded-xl border p-2">
+                    <div className="text-sm">{f.name}</div>
+                    <Button size="icon" variant="ghost" onClick={() => setFriends((prev) => prev.filter((x) => x.id !== f.id))}>
+                      <Trash2 className="h-4 w-4"/>
+                    </Button>
+                  </div>
+                ))}
+                {friends.length === 0 && <div className="text-sm text-muted-foreground">No friends added yet.</div>}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Disciplines</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Input placeholder="Add a new discipline (e.g., Fasting)" value={newDisc} onChange={(e) => setNewDisc(e.target.value)} />
+              <Input placeholder="Emoji (optional)" className="w-28" value={newDiscEmoji} onChange={(e) => setNewDiscEmoji(e.target.value)} />
+              <Button onClick={addDisc}><Plus className="h-4 w-4 mr-1"/>Add</Button>
+            </div>
+            <div className="space-y-2">
+              {disciplines.map((d) => (
+                <div key={d.id} className="flex items-center justify-between rounded-xl border p-2">
+                  <div className="text-sm font-medium flex items-center gap-2">
+                    <IconOrEmoji d={d} className="h-4 w-4"/>
+                    {d.name}
+                  </div>
+                  <Button size="icon" variant="ghost" onClick={() => setDisciplines((prev) => prev.filter((x) => x.id !== d.id))}>
+                    <Trash2 className="h-4 w-4"/>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Theme & Appearance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm">Dark mode</div>
+              <Switch checked={prefs.darkMode} onCheckedChange={(v) => setPrefs((p) => ({ ...p, darkMode: v }))} />
+            </div>
+            <div>
+              <div className="text-sm mb-2 flex items-center gap-2"><Palette className="h-4 w-4"/> Accent color</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(ACCENTS).map(([k, v]) => (
+                  <button
+                    key={k}
+                    onClick={() => setPrefs((p) => ({ ...p, accent: k }))}
+                    className={classNames(
+                      "h-8 w-8 rounded-full border",
+                      prefs.accent === k ? "ring-2 ring-primary" : ""
+                    )}
+                    title={k}
+                    style={{ backgroundColor: v.primary }}
+                  />
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Backup & Data</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <Button variant="secondary" onClick={exportData}><Download className="h-4 w-4 mr-2"/> Export JSON</Button>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importData(e.target.files[0])}/>
+                <span className="inline-flex items-center rounded-md border px-3 py-2 text-sm"><Upload className="h-4 w-4 mr-2"/>Import JSON</span>
+              </label>
+              <Button variant="ghost" onClick={resetAll}><RotateCcw className="h-4 w-4 mr-2"/> Reset all data</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // --- Layout ---
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-slate-100">
+      <div className="max-w-6xl mx-auto p-4 md:p-6">
+        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <BookOpen className="h-5 w-5"/>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Daily Rhythms</h1>
+              <p className="text-sm text-muted-foreground">Track Scripture, prayer, and more with friends.</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-xl border p-1">
+              <Button variant="ghost" size="sm" onClick={() => setSelectedDate((d) => subWeeks(d, 1))}>-1w</Button>
+              <div className="px-3 text-sm font-medium">Week of {format(startOfWeekISO(selectedDate), "MMM d, yyyy")}</div>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedDate((d) => addWeeks(d, 1))}>+1w</Button>
+            </div>
+            <div className="flex items-center gap-2">
+              {weekDays.map((d, i) => (
+                <DayPill key={i} day={d} onClick={() => setSelectedDate(d)} />
+              ))}
+            </div>
+            <Button variant="secondary" onClick={() => setSelectedDate(new Date())}>Today</Button>
+            <div className="ml-2 flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={() => setPrefs((p) => ({ ...p, darkMode: !p.darkMode }))} title="Toggle dark mode">
+                {prefs.darkMode ? <Sun className="h-4 w-4"/> : <Moon className="h-4 w-4"/>}
+              </Button>
+              <div className="flex items-center gap-1">
+                {Object.entries(ACCENTS).slice(0,4).map(([k, v]) => (
+                  <button key={k} onClick={() => setPrefs((p) => ({ ...p, accent: k }))} className="h-6 w-6 rounded-full border" title={k} style={{ backgroundColor: v.primary }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <nav className="flex items-center gap-2 mb-4">
+          <TabButton active={activeTab === "today"} onClick={() => setActiveTab("today")}>Today</TabButton>
+          <TabButton active={activeTab === "week"} onClick={() => setActiveTab("week")}>Week</TabButton>
+          <TabButton active={activeTab === "feed"} onClick={() => setActiveTab("feed")}>Feed</TabButton>
+          <TabButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")}>Settings</TabButton>
+        </nav>
+
+        <main className="space-y-4">
+          <AnimatePresence mode="wait">
+            {activeTab === "today" && (
+              <motion.div key="today" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                <TodayView />
+              </motion.div>
+            )}
+            {activeTab === "week" && (
+              <motion.div key="week" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                <WeekView />
+              </motion.div>
+            )}
+            {activeTab === "feed" && (
+              <motion.div key="feed" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                <FeedView />
+              </motion.div>
+            )}
+            {activeTab === "settings" && (
+              <motion.div key="settings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+                <SettingsView />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </main>
+
+        <footer className="mt-10 text-xs text-center text-muted-foreground">
+          Built for small groups and friends. Your data stays in your browser.
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function TabButton({ active, children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={classNames(
+        "px-4 py-2 rounded-xl border text-sm transition-all",
+        active ? "bg-primary text-primary-foreground border-primary" : "bg-white dark:bg-slate-800 hover:bg-muted"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
