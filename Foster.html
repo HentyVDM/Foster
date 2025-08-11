@@ -1,775 +1,523 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { format, startOfWeek, addDays, isSameDay, parseISO, addWeeks, subWeeks } from "date-fns";
-import { 
-  CheckCircle2,
-  MessageCircle,
-  Plus,
-  CalendarDays,
-  Users,
-  BookOpen,
-  Heart,
-  Download,
-  Upload,
-  Sun,
-  Moon,
-  CloudSun,
-  Trash2,
-  Edit3,
-  Target,
-  Flame,
-  RotateCcw,
-  Palette
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-
-/**
- * Spiritual Disciplines Tracker
- * ---------------------------------------------------------
- * Single-file React app using Tailwind + shadcn/ui.
- * Tracks daily rhythms (morning/midday/evening) for disciplines
- * like Bible reading & prayer, with comments + simple group feed.
- * Data persists in localStorage and can be exported/imported.
- *
- * New in this version:
- * - Custom disciplines with optional emoji icon
- * - Dark mode toggle + accent color themes (persisted)
- */
-
-// --- Types ---
-const RHYTHMS = [
-  { key: "morning", label: "Morning", icon: Sun },
-  { key: "midday", label: "Midday", icon: CloudSun },
-  { key: "evening", label: "Evening", icon: Moon },
-];
-
-// Starter disciplines (editable)
-const DEFAULT_DISCIPLINES = [
-  { id: "bible", name: "Bible Reading", icon: BookOpen },
-  { id: "prayer", name: "Prayer", icon: Target },
-  { id: "journaling", name: "Journaling", icon: Edit3 },
-  { id: "silence", name: "Silence & Solitude", icon: Flame },
-];
-
-// Accent palettes (primary + foreground)
-const ACCENTS = {
-  indigo: { primary: "#4f46e5", foreground: "#ffffff" },
-  emerald: { primary: "#059669", foreground: "#ffffff" },
-  rose: { primary: "#e11d48", foreground: "#ffffff" },
-  amber: { primary: "#d97706", foreground: "#111111" },
-  sky: { primary: "#0284c7", foreground: "#ffffff" },
-  violet: { primary: "#7c3aed", foreground: "#ffffff" },
-};
-
-// --- localStorage helpers ---
-const LS_KEY = "spiritual-disciplines-tracker:v1";
-
-function loadData() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (e) {
-    console.warn("Failed to load data", e);
-    return null;
-  }
-}
-
-function saveData(state) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.warn("Failed to save data", e);
-  }
-}
-
-// --- Utilities ---
-function startOfWeekISO(date) {
-  return startOfWeek(date, { weekStartsOn: 1 }); // Monday
-}
-
-function getWeekDays(baseDate) {
-  const sow = startOfWeekISO(baseDate);
-  return Array.from({ length: 7 }, (_, i) => addDays(sow, i));
-}
-
-function dateKey(date) {
-  return format(date, "yyyy-MM-dd");
-}
-
-function todayKey() {
-  return dateKey(new Date());
-}
-
-function classNames(...cls) {
-  return cls.filter(Boolean).join(" ");
-}
-
-function applyAccent(name) {
-  const theme = ACCENTS[name] || ACCENTS.indigo;
-  const root = document.documentElement;
-  root.style.setProperty("--primary", theme.primary);
-  root.style.setProperty("--primary-foreground", theme.foreground);
-}
-
-function applyDarkMode(on) {
-  const root = document.documentElement;
-  if (on) root.classList.add("dark"); else root.classList.remove("dark");
-}
-
-function IconOrEmoji({ d, className = "h-5 w-5" }) {
-  if (d.emoji) return <span className="text-lg" aria-hidden>{d.emoji}</span>;
-  const Icon = d.icon || Target;
-  return <Icon className={className} />;
-}
-
-// --- Main App ---
-export default function App() {
-  // Core state
-  const [me, setMe] = useState({ id: "me", name: "You" });
-  const [friends, setFriends] = useState([
-    { id: "f1", name: "Ava" },
-    { id: "f2", name: "Noah" },
-  ]);
-  const [disciplines, setDisciplines] = useState(DEFAULT_DISCIPLINES);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [entries, setEntries] = useState({});
-  const [comments, setComments] = useState({});
-  const [activeTab, setActiveTab] = useState("today");
-  const [showOnlyMine, setShowOnlyMine] = useState(false);
-  const [prefs, setPrefs] = useState({ darkMode: false, accent: "indigo" });
-
-  // Load / Save
-  useEffect(() => {
-    const data = loadData();
-    if (data) {
-      setMe(data.me || { id: "me", name: "You" });
-      setFriends(data.friends || []);
-      setDisciplines(data.disciplines?.length ? data.disciplines : DEFAULT_DISCIPLINES);
-      setEntries(data.entries || {});
-      setComments(data.comments || {});
-      setPrefs(data.prefs || { darkMode: false, accent: "indigo" });
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Daily Rhythms · Spiritual Disciplines Tracker</title>
+  <meta name="description" content="Track Bible reading, prayer, and other spiritual disciplines with friends. Daily rhythms + comments + notes. Everything saves in your browser.">
+  <style>
+    /* ===== Design tokens ===== */
+    :root{
+      --bg: #f8fafc;               /* slate-50 */
+      --surface: #ffffff;
+      --text: #0f172a;             /* slate-900 */
+      --muted: #64748b;            /* slate-500 */
+      --border: #e2e8f0;           /* slate-200 */
+      --ring: #cbd5e1;             /* slate-300 */
+      --primary: #4f46e5;          /* indigo-600 */
+      --primary-foreground: #ffffff;
+      --success: #16a34a;          /* green-600 */
+      --danger: #dc2626;           /* red-600 */
+      --shadow: 0 1px 2px rgba(15,23,42,0.05), 0 4px 14px rgba(15,23,42,0.06);
     }
-  }, []);
-
-  useEffect(() => {
-    saveData({ me, friends, disciplines, entries, comments, prefs });
-  }, [me, friends, disciplines, entries, comments, prefs]);
-
-  // Apply theme changes
-  useEffect(() => {
-    applyAccent(prefs.accent);
-    applyDarkMode(prefs.darkMode);
-  }, [prefs]);
-
-  const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
-
-  // Derived helpers
-  function getEntry(userId, dId, dayKey) {
-    const key = `${userId}__${dId}__${dayKey}`;
-    return entries[key] || { morning: false, midday: false, evening: false };
-  }
-
-  function setEntry(userId, dId, dayKey, partial) {
-    const key = `${userId}__${dId}__${dayKey}`;
-    setEntries((prev) => ({ ...prev, [key]: { ...getEntry(userId, dId, dayKey), ...partial } }));
-  }
-
-  function toggleRhythm(userId, dId, dayKey, rhythmKey) {
-    const prev = getEntry(userId, dId, dayKey);
-    setEntry(userId, dId, dayKey, { [rhythmKey]: !prev[rhythmKey] });
-  }
-
-  function addComment(dayKey, dId, user, text) {
-    const key = `${dId}__${dayKey}`;
-    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const newC = { id, userId: user.id, userName: user.name, text, ts: new Date().toISOString(), likes: 0 };
-    setComments((prev) => ({ ...prev, [key]: [...(prev[key] || []), newC] }));
-  }
-
-  function likeComment(dayKey, dId, id) {
-    const key = `${dId}__${dayKey}`;
-    setComments((prev) => ({
-      ...prev,
-      [key]: (prev[key] || []).map((c) => (c.id === id ? { ...c, likes: (c.likes || 0) + 1 } : c)),
-    }));
-  }
-
-  function deleteComment(dayKey, dId, id) {
-    const key = `${dId}__${dayKey}`;
-    setComments((prev) => ({ ...prev, [key]: (prev[key] || []).filter((c) => c.id !== id) }));
-  }
-
-  // Streak calculation per discipline for current user
-  function getStreak(dId) {
-    let streak = 0;
-    const today = new Date();
-    for (let i = 0; i < 365; i++) {
-      const d = addDays(today, -i);
-      const key = dateKey(d);
-      const e = getEntry(me.id, dId, key);
-      const done = RHYTHMS.some((r) => e[r.key]);
-      if (done) streak += 1; else break;
+    .dark{
+      --bg: #0b1220;               /* deep slate */
+      --surface: #0f172a;          /* slate-900 */
+      --text: #e2e8f0;             /* slate-200 */
+      --muted: #94a3b8;            /* slate-400 */
+      --border: #1e293b;           /* slate-800 */
+      --ring: #334155;             /* slate-700 */
+      --primary: #7c3aed;          /* violet-600 */
+      --primary-foreground: #ffffff;
+      --success: #22c55e;          /* green-500 */
+      --danger: #ef4444;           /* red-500 */
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 20px rgba(0,0,0,0.25);
     }
-    return streak;
-  }
 
-  const weekCompletion = useMemo(() => {
-    const map = {};
-    disciplines.forEach((d) => {
-      map[d.id] = weekDays.map((day) => {
-        const e = getEntry(me.id, d.id, dateKey(day));
-        return RHYTHMS.filter((r) => e[r.key]).length;
-      });
-    });
-    return map; // { [dId]: [count each day] }
-  }, [disciplines, weekDays, entries, me.id]);
+    /* ===== Base ===== */
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(to bottom,var(--bg),#fff);color:var(--text);font:16px/1.4 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"}
+    .container{max-width:1100px;margin-inline:auto;padding:24px}
+    h1{margin:0;font-size:28px;letter-spacing:-0.02em}
+    .muted{color:var(--muted)}
+    .stack{display:flex;flex-direction:column;gap:12px}
 
-  function exportData() {
-    const payload = { me, friends, disciplines, entries, comments, prefs };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `spiritual-tracker-export-${todayKey()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+    /* ===== Cards ===== */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow)}
+    .card header{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+    .card header h2{margin:0;font-size:16px}
+    .card .content{padding:16px 18px}
 
-  function importData(file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target.result);
-        if (!data) return;
-        setMe(data.me || me);
-        setFriends(Array.isArray(data.friends) ? data.friends : friends);
-        setDisciplines(Array.isArray(data.disciplines) ? data.disciplines : disciplines);
-        setEntries(data.entries || entries);
-        setComments(data.comments || comments);
-        setPrefs(data.prefs || prefs);
-      } catch (err) {
-        alert("Import failed. Invalid file.");
-      }
+    /* ===== Buttons & Inputs ===== */
+    .btn{appearance:none;border:1px solid var(--border);background:#fff;color:var(--text);border-radius:12px;padding:8px 12px;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;box-shadow:0 0 0 0 transparent;transition:0.15s}
+    .btn:hover{background:#f1f5f9}
+    .btn:focus{outline:none;box-shadow:0 0 0 3px var(--ring)}
+    .btn.secondary{background:var(--surface)}
+    .btn.primary{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+    .btn.ghost{background:transparent}
+    .btn.icon{padding:8px; width:36px; height:36px; justify-content:center}
+
+    .chip{border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--muted)}
+
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .spacer{flex:1}
+
+    input[type="text"], textarea{width:100%;background:#fff;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:8px 10px;font-size:14px;transition:0.15s}
+    textarea{min-height:80px;resize:vertical}
+    input[type="file"]{display:none}
+    .field{display:flex;flex-direction:column;gap:6px}
+
+    /* ===== Nav / Week picker ===== */
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .week{display:flex;gap:6px;align-items:center}
+    .pill{border:1px solid var(--border);border-radius:12px;padding:6px 10px;background:transparent;cursor:pointer}
+    .pill.active{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+
+    /* ===== Layout grid ===== */
+    .grid{display:grid;gap:16px}
+    @media(min-width:900px){.grid.two{grid-template-columns:1fr 1fr}}
+
+    /* ===== Toggles ===== */
+    .toggle{width:36px;height:36px;border:1px solid var(--border);border-radius:999px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:#fff}
+    .toggle.on{background:var(--success);border-color:var(--success);color:#fff}
+
+    .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:10px;padding:2px 8px;color:var(--muted)}
+
+    .note-grid{display:grid;grid-template-columns:1fr;gap:8px}
+    @media(min-width:700px){.note-grid{grid-template-columns:repeat(3,1fr)}}
+
+    .comment{border:1px solid var(--border);border-radius:12px;padding:10px}
+    .comment .meta{font-size:12px;color:var(--muted)}
+
+    .table{width:100%;border-collapse:separate;border-spacing:0}
+    .table th,.table td{padding:10px;border-top:1px solid var(--border);text-align:left;vertical-align:top}
+    .table th:first-child,.table td:first-child{padding-left:0}
+    .table th:last-child,.table td:last-child{padding-right:0}
+
+    /* Accent dots */
+    .dot{width:18px;height:18px;border:1px solid var(--border);border-radius:999px;display:inline-block;cursor:pointer}
+    .dot.active{outline:2px solid var(--primary)}
+  </style>
+</head>
+<body>
+  <div class="container" id="app"></div>
+
+  <script>
+    // ===== Utilities =====
+    const LS_KEY = 'sdtracker_html_v1';
+    const RHYTHMS = [
+      { key: 'morning', label: 'Morning', icon: '☀️' },
+      { key: 'midday', label: 'Midday', icon: '🌤️' },
+      { key: 'evening', label: 'Evening', icon: '🌙' },
+    ];
+
+    const ACCENTS = {
+      indigo: '#4f46e5', emerald: '#059669', rose: '#e11d48', amber: '#d97706', sky: '#0284c7', violet: '#7c3aed'
     };
-    reader.readAsText(file);
-  }
 
-  // UI helpers
-  function DayPill({ day, onClick }) {
-    const selected = isSameDay(day, selectedDate);
-    return (
-      <button
-        onClick={onClick}
-        className={classNames(
-          "px-3 py-2 rounded-xl border transition-all",
-          selected ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"
-        )}
-        title={format(day, "cccc, MMM d")}
-      >
-        <div className="text-xs opacity-80">{format(day, "EEE")}</div>
-        <div className="font-semibold -mt-0.5">{format(day, "d")}</div>
-      </button>
-    );
-  }
+    const fmt = (date, opts) => new Intl.DateTimeFormat(undefined, opts).format(date);
+    const startOfWeek = (d) => {
+      const date = new Date(d);
+      const day = (date.getDay() + 6) % 7; // Mon=0
+      date.setDate(date.getDate() - day); date.setHours(0,0,0,0); return date;
+    };
+    const addDays = (d, n) => { const a=new Date(d); a.setDate(a.getDate()+n); return a; };
+    const addWeeks = (d, n) => addDays(d, n*7);
+    const isSameDay = (a,b) => a.toDateString()===b.toDateString();
+    const dayKey = (d) => new Date(d).toISOString().slice(0,10);
 
-  function RhythmToggle({ checked, onChange, Icon }) {
-    return (
-      <button
-        onClick={onChange}
-        className={classNames(
-          "h-9 w-9 rounded-full flex items-center justify-center border",
-          checked ? "bg-green-600 text-white border-green-600" : "hover:bg-muted"
-        )}
-      >
-        <Icon className="h-4 w-4" />
-      </button>
-    );
-  }
+    function load(){ try{ const raw=localStorage.getItem(LS_KEY); return raw? JSON.parse(raw): null }catch{ return null } }
+    function save(state){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch{} }
 
-  function DisciplineRow({ d, dayKey, user }) {
-    const entry = getEntry(user.id, d.id, dayKey);
-    return (
-      <div className="flex items-center justify-between gap-3 py-2">
-        <div className="flex items-center gap-3">
-          <IconOrEmoji d={d} className="h-5 w-5 opacity-80" />
-          <div>
-            <div className="font-medium">{d.name}</div>
-            <div className="text-xs text-muted-foreground">{user.name}</div>
+    // ===== State =====
+    const initial = load() || {
+      me: { id: 'me', name: 'You' },
+      friends: [{ id: 'f1', name: 'Ava' }, { id: 'f2', name: 'Noah' }],
+      disciplines: [
+        { id: 'bible', name: 'Bible Reading', emoji: '📖' },
+        { id: 'prayer', name: 'Prayer', emoji: '🙏' },
+        { id: 'journaling', name: 'Journaling', emoji: '🖊️' },
+        { id: 'silence', name: 'Silence & Solitude', emoji: '🔥' },
+      ],
+      entries: {}, // key: userId__discId__YYYY-MM-DD -> { morning,bool; midday,bool; evening,bool; notes:{morning,midday,evening} }
+      comments: {}, // key: discId__YYYY-MM-DD -> [ {id,userId,userName,text,ts,likes} ]
+      prefs: { dark: false, accent: 'indigo' },
+      selected: new Date(),
+      activeTab: 'today',
+      onlyMe: false,
+    };
+
+    let state = deepClone(initial);
+
+    function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+
+    function applyTheme(){
+      const root = document.documentElement;
+      root.style.setProperty('--primary', ACCENTS[state.prefs.accent] || ACCENTS.indigo);
+      if(state.prefs.dark){ root.classList.add('dark'); } else { root.classList.remove('dark'); }
+    }
+
+    // ===== Derived =====
+    const weekDays = (selected) => {
+      const sow = startOfWeek(selected);
+      return Array.from({length:7},(_,i)=> addDays(sow,i));
+    };
+
+    function getEntry(userId, dId, dk){
+      const key = `${userId}__${dId}__${dk}`;
+      return state.entries[key] || { morning:false, midday:false, evening:false, notes:{morning:'',midday:'',evening:''} };
+    }
+    function setEntry(userId, dId, dk, partial){
+      const key = `${userId}__${dId}__${dk}`;
+      const prev = getEntry(userId,dId,dk);
+      state.entries[key] = Object.assign({}, prev, partial, {
+        notes: Object.assign({}, prev.notes, partial.notes||{})
+      });
+    }
+
+    function streakFor(dId){
+      let streak=0; const today=new Date();
+      for(let i=0;i<365;i++){
+        const dk=dayKey(addDays(today,-i));
+        const e=getEntry(state.me.id,dId,dk);
+        if(e.morning||e.midday||e.evening) streak++; else break;
+      }
+      return streak;
+    }
+
+    // ===== Rendering =====
+    function render(){
+      applyTheme();
+      save(state);
+      const days = weekDays(new Date(state.selected));
+      const selectedKey = dayKey(state.selected);
+      const people = [state.me, ...(state.onlyMe? []: state.friends)];
+
+      const header = `
+        <div class="row" style="justify-content:space-between; margin-bottom:16px">
+          <div class="row" style="gap:12px">
+            <div style="width:40px;height:40px;border-radius:14px;background:color-mix(in lab, var(--primary) 12%, transparent);display:flex;align-items:center;justify-content:center">📖</div>
+            <div>
+              <h1>Daily Rhythms</h1>
+              <div class="muted" style="font-size:13px">Track Scripture, prayer, and more with friends.</div>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {RHYTHMS.map((r) => (
-            <RhythmToggle
-              key={r.key}
-              checked={!!entry[r.key]}
-              onChange={() => toggleRhythm(user.id, d.id, dayKey, r.key)}
-              Icon={r.icon}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
+          <div class="toolbar">
+            <div class="row card" style="padding:6px 8px">
+              <button class="btn ghost" data-action="shift-week" data-delta="-1">-1w</button>
+              <div class="chip">Week of ${fmt(startOfWeek(state.selected), {month:'short', day:'numeric', year:'numeric'})}</div>
+              <button class="btn ghost" data-action="shift-week" data-delta="1">+1w</button>
+            </div>
+            <div class="week">
+              ${days.map(d=>`
+                <button class="pill ${isSameDay(d,state.selected)?'active':''}" data-action="select-day" data-date="${d.toISOString()}">
+                  <div style="font-size:12px;opacity:.8">${fmt(d,{weekday:'short'})}</div>
+                  <div style="font-weight:600;margin-top:-2px">${fmt(d,{day:'numeric'})}</div>
+                </button>
+              `).join('')}
+            </div>
+            <button class="btn secondary" data-action="today">Today</button>
+            <button class="btn icon ghost" title="Toggle dark mode" data-action="toggle-dark">${state.prefs.dark? '☀️':'🌙'}</button>
+            <div class="row">
+              ${Object.entries(ACCENTS).map(([k,v])=>`<span class="dot ${state.prefs.accent===k?'active':''}" style="background:${v}" data-action="accent" data-accent="${k}"></span>`).join('')}
+            </div>
+          </div>
+        </div>`;
 
-  function Comments({ d, dayKey }) {
-    const [text, setText] = useState("");
-    const key = `${d.id}__${dayKey}`;
-    const list = comments[key] || [];
-    return (
-      <div className="mt-4">
-        <div className="text-sm font-medium mb-2 flex items-center gap-2"><MessageCircle className="h-4 w-4"/> Comments</div>
-        <div className="space-y-3">
-          <AnimatePresence initial={false}>
-            {list.map((c) => (
-              <motion.div
-                key={c.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                className="rounded-xl border p-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">{c.userName}</div>
-                  <div className="text-xs text-muted-foreground">{format(parseISO(c.ts), "MMM d, HH:mm")}</div>
-                </div>
-                <div className="text-sm mt-1 whitespace-pre-wrap">{c.text}</div>
-                <div className="flex items-center gap-2 mt-2">
-                  <Button size="sm" variant="ghost" onClick={() => likeComment(dayKey, d.id, c.id)}>
-                    <Heart className="h-4 w-4 mr-1"/>{c.likes || 0}
-                  </Button>
-                  {(c.userId === me.id) && (
-                    <Button size="sm" variant="ghost" onClick={() => deleteComment(dayKey, d.id, c.id)}>
-                      <Trash2 className="h-4 w-4 mr-1"/>Delete
-                    </Button>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-        <div className="mt-3 flex items-center gap-2">
-          <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Share a reflection, prayer request, or encouragement…"
-            className="min-h-[80px]"
-          />
-          <Button onClick={() => { if (text.trim()) { addComment(dayKey, d.id, me, text.trim()); setText(""); } }}>
-            <MessageCircle className="h-4 w-4 mr-2"/> Post
-          </Button>
-        </div>
-      </div>
-    );
-  }
+      const tabs = `
+        <div class="row" style="margin:8px 0 16px">
+          ${['today','week','feed','settings'].map(t=>`<button class="btn ${state.activeTab===t? 'primary': ''}" data-action="tab" data-tab="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join(' ')}
+        </div>`;
 
-  function TodayView() {
-    const dayKeyStr = dateKey(selectedDate);
-    const people = [me, ...(showOnlyMine ? [] : friends)];
-    return (
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5"/> Today · {format(selectedDate, "EEE, MMM d")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {disciplines.map((d) => (
-                <div key={d.id} className="rounded-xl border p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <IconOrEmoji d={d} className="h-5 w-5"/>
-                      <div className="font-semibold">{d.name}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {RHYTHMS.map((r) => (
-                        <div key={r.key} className="flex items-center gap-1">
-                          <Badge variant="secondary" className="hidden sm:inline-flex">{r.label}</Badge>
-                          <RhythmToggle
-                            checked={!!getEntry(me.id, d.id, dayKeyStr)[r.key]}
-                            onChange={() => toggleRhythm(me.id, d.id, dayKeyStr, r.key)}
-                            Icon={r.icon}
-                          />
-                        </div>
-                      ))}
+      const todayLeft = `
+        <div class="card">
+          <header><h2>Today · ${fmt(state.selected,{weekday:'short', month:'short', day:'numeric'})}</h2></header>
+          <div class="content stack">
+            ${state.disciplines.map(d=>{
+              const e = getEntry(state.me.id, d.id, selectedKey);
+              return `
+              <div class="card" style="border-radius:12px">
+                <div class="content">
+                  <div class="row" style="justify-content:space-between">
+                    <div class="row" style="gap:8px"><span style="font-size:18px">${d.emoji||'🎯'}</span> <strong>${d.name}</strong></div>
+                    <div class="row">
+                      ${RHYTHMS.map(r=>`
+                        <span class="badge" style="display:none;" data-hide-on-small>${r.label}</span>
+                        <button class="toggle ${e[r.key]?'on':''}" title="${r.label}" data-action="toggle" data-user="${state.me.id}" data-disc="${d.id}" data-day="${selectedKey}" data-rhythm="${r.key}">${r.icon}</button>
+                      `).join('')}
                     </div>
                   </div>
-                  <Comments d={d} dayKey={dayKeyStr} />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5"/> Friends · Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-sm text-muted-foreground">See how everyone is doing today.</div>
-              <div className="flex items-center gap-2 text-sm">
-                <span>Only me</span>
-                <Switch checked={showOnlyMine} onCheckedChange={setShowOnlyMine}/>
-              </div>
-            </div>
-            <div className="space-y-3">
-              {people.map((p) => (
-                <div key={p.id} className="rounded-xl border p-3">
-                  <div className="font-medium mb-2">{p.name}</div>
-                  {disciplines.map((d) => (
-                    <DisciplineRow key={`${p.id}-${d.id}`} d={d} dayKey={dayKeyStr} user={p} />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+                  <details style="margin-top:10px">
+                    <summary class="muted" style="cursor:pointer">Add details for ${d.name}</summary>
+                    <div class="note-grid" style="margin-top:10px">
+                      ${RHYTHMS.map(r=>`
+                        <div class="field">
+                          <label class="muted" style="font-size:12px">${r.label} notes</label>
+                          <textarea data-action="note" data-user="${state.me.id}" data-disc="${d.id}" data-day="${selectedKey}" data-rhythm="${r.key}" placeholder="What passage, what you prayed, etc.">${e.notes?.[r.key]||''}</textarea>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </details>
 
-  function WeekView() {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Weekly Rhythm · {format(weekDays[0], "MMM d")} – {format(weekDays[6], "MMM d, yyyy")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+                  ${commentsBlock(d.id, selectedKey)}
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+
+      const todayRight = `
+        <div class="card">
+          <header><h2>Friends · Today</h2></header>
+          <div class="content">
+            <div class="row" style="justify-content:space-between; margin-bottom:10px">
+              <div class="muted" style="font-size:14px">See how everyone is doing today.</div>
+              <label class="row" style="gap:6px; font-size:14px"><span>Only me</span>
+                <input type="checkbox" ${state.onlyMe? 'checked':''} data-action="only-me" />
+              </label>
+            </div>
+            <div class="stack">
+              ${people.map(p=>`
+                <div class="card" style="border-radius:12px">
+                  <div class="content" style="padding:10px 12px">
+                    <div style="font-weight:600;margin-bottom:6px">${p.name}</div>
+                    ${state.disciplines.map(d=>{
+                      const e=getEntry(p.id,d.id,selectedKey);
+                      return `<div class="row" style="justify-content:space-between; padding:6px 0">
+                        <div class="row" style="gap:8px"><span>${d.emoji||'🎯'}</span> ${d.name}</div>
+                        <div class="row">
+                          ${RHYTHMS.map(r=>`<button class="toggle ${e[r.key]?'on':''}" title="${r.label}" data-action="toggle" data-user="${p.id}" data-disc="${d.id}" data-day="${selectedKey}" data-rhythm="${r.key}">${r.icon}</button>`).join('')}
+                        </div>`+ (p.id===state.me.id? '' : '') + `
+                      </div>`;
+                    }).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>`;
+
+      const today = `<div class="grid two">${todayLeft}${todayRight}</div>`;
+
+      const week = `
+        <div class="card">
+          <header><h2>Weekly Rhythm · ${fmt(weekDays(state.selected)[0],{month:'short',day:'numeric'})} – ${fmt(weekDays(state.selected)[6],{month:'short',day:'numeric',year:'numeric'})}</h2></header>
+          <div class="content">
+            <table class="table">
               <thead>
-                <tr className="text-left">
-                  <th className="p-2">Discipline</th>
-                  {weekDays.map((d, i) => (
-                    <th key={i} className="p-2 min-w-[100px]">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{format(d, "EEE")}</span>
-                        <span className="text-xs text-muted-foreground">{format(d, "MMM d")}</span>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="p-2">Streak</th>
+                <tr>
+                  <th>Discipline</th>
+                  ${weekDays(state.selected).map(d=>`<th>${fmt(d,{weekday:'short'})}<div class="muted" style="font-size:12px">${fmt(d,{month:'short',day:'numeric'})}</div></th>`).join('')}
+                  <th>Streak</th>
                 </tr>
               </thead>
               <tbody>
-                {disciplines.map((d) => (
-                  <tr key={d.id} className="border-t">
-                    <td className="p-2 font-medium">
-                      <div className="flex items-center gap-2"><IconOrEmoji d={d} className="h-4 w-4"/>{d.name}</div>
-                    </td>
-                    {weekDays.map((day, i) => {
-                      const e = getEntry(me.id, d.id, dateKey(day));
-                      const count = RHYTHMS.filter((r) => e[r.key]).length;
-                      return (
-                        <td key={i} className="p-2">
-                          <div className="flex items-center gap-2">
-                            {RHYTHMS.map((r) => (
-                              <RhythmToggle
-                                key={r.key}
-                                checked={!!e[r.key]}
-                                onChange={() => toggleRhythm(me.id, d.id, dateKey(day), r.key)}
-                                Icon={r.icon}
-                              />
-                            ))}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3"/> {count}/3
-                          </div>
-                        </td>
-                      );
-                    })}
-                    <td className="p-2">
-                      <Badge variant="secondary">🔥 {getStreak(d.id)} days</Badge>
-                    </td>
+                ${state.disciplines.map(d=>`
+                  <tr>
+                    <td><div class="row" style="gap:6px;align-items:center"><span>${d.emoji||'🎯'}</span><strong>${d.name}</strong></div></td>
+                    ${weekDays(state.selected).map(day=>{
+                      const dk = dayKey(day);
+                      const e = getEntry(state.me.id,d.id,dk);
+                      const count = ['morning','midday','evening'].filter(k=>e[k]).length;
+                      return `<td>
+                        <div class="row">
+                          ${RHYTHMS.map(r=>`<button class="toggle ${e[r.key]?'on':''}" data-action="toggle" data-user="${state.me.id}" data-disc="${d.id}" data-day="${dk}" data-rhythm="${r.key}">${r.icon}</button>`).join('')}
+                        </div>
+                        <div class="muted" style="font-size:12px;margin-top:6px">✔️ ${count}/3</div>
+                      </td>`
+                    }).join('')}
+                    <td><span class="chip">🔥 ${streakFor(d.id)} days</span></td>
                   </tr>
-                ))}
+                `).join('')}
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
-    );
-  }
+        </div>`;
 
-  function FeedView() {
-    const items = Object.entries(comments)
-      .flatMap(([key, list]) => list.map((c) => ({ key, ...c })))
-      .sort((a, b) => new Date(b.ts) - new Date(a.ts));
-
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Community Feed</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {items.length === 0 && <div className="text-sm text-muted-foreground">No posts yet. Share an encouragement or reflection from Today.</div>}
-            {items.map((it) => {
-              const [dId, dayKey] = it.key.split("__");
-              const d = disciplines.find((x) => x.id === dId);
-              return (
-                <div key={it.id} className="rounded-xl border p-3">
-                  <div className="text-xs text-muted-foreground mb-1">{format(parseISO(it.ts), "MMM d, HH:mm")} · {format(parseISO(dayKey), "EEE, MMM d")}</div>
-                  <div className="flex items-center gap-2 mb-2">
-                    {d && <IconOrEmoji d={d} className="h-4 w-4"/>}
-                    <div className="font-medium">{it.userName} in {d ? d.name : dId}</div>
-                  </div>
-                  <div className="text-sm whitespace-pre-wrap">{it.text}</div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Button size="sm" variant="ghost" onClick={() => likeComment(dayKey, dId, it.id)}>
-                      <Heart className="h-4 w-4 mr-1"/>{it.likes || 0}
-                    </Button>
-                  </div>
+      const feed = `
+        <div class="card">
+          <header><h2>Community Feed</h2></header>
+          <div class="content stack">
+            ${feedItems().length===0 ? `<div class="muted">No posts yet. Share an encouragement or reflection from Today.</div>` : ''}
+            ${feedItems().map(it=>{
+              const [dId, dk] = it.key.split('__');
+              const disc = state.disciplines.find(x=>x.id===dId);
+              return `<div class="comment">
+                <div class="meta">${new Date(it.ts).toLocaleString()} · ${new Date(dk).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}</div>
+                <div class="row" style="gap:6px; align-items:center; margin:6px 0"><span>${disc?.emoji||'🎯'}</span><strong>${it.userName}</strong> in ${disc? disc.name: dId}</div>
+                <div style="white-space:pre-wrap">${escapeHtml(it.text)}</div>
+                <div class="row" style="margin-top:6px">
+                  <button class="btn ghost" data-action="like" data-disc="${dId}" data-day="${dk}" data-id="${it.id}">❤️ ${it.likes||0}</button>
                 </div>
-              );
-            })}
+              </div>`
+            }).join('')}
           </div>
-        </CardContent>
-      </Card>
-    );
-  }
+        </div>`;
 
-  function SettingsView() {
-    const [newDisc, setNewDisc] = useState("");
-    const [newDiscEmoji, setNewDiscEmoji] = useState("");
-    const [newFriend, setNewFriend] = useState("");
-
-    function addDisc() {
-      const name = newDisc.trim();
-      if (!name) return;
-      const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      const emoji = newDiscEmoji.trim();
-      setDisciplines((prev) => [{ id, name, ...(emoji ? { emoji } : { icon: Target }) }, ...prev]);
-      setNewDisc("");
-      setNewDiscEmoji("");
-    }
-
-    function addFriend() {
-      const name = newFriend.trim();
-      if (!name) return;
-      const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Math.random().toString(36).slice(2, 5);
-      setFriends((prev) => [...prev, { id, name }]);
-      setNewFriend("");
-    }
-
-    function resetAll() {
-      if (!confirm("Reset everything? This clears your data on this device.")) return;
-      setMe({ id: "me", name: "You" });
-      setFriends([]);
-      setDisciplines(DEFAULT_DISCIPLINES);
-      setEntries({});
-      setComments({});
-      setPrefs({ darkMode: false, accent: "indigo" });
-    }
-
-    return (
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile & Group</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="text-sm mb-1">Your name</div>
-              <Input value={me.name} onChange={(e) => setMe({ ...me, name: e.target.value })} />
-            </div>
-
-            <Separator />
-
-            <div>
-              <div className="text-sm font-medium mb-2">Friends</div>
-              <div className="flex items-center gap-2 mb-2">
-                <Input placeholder="Add a friend by name" value={newFriend} onChange={(e) => setNewFriend(e.target.value)} />
-                <Button onClick={addFriend}><Plus className="h-4 w-4 mr-1"/>Add</Button>
+      const settings = `
+        <div class="grid two">
+          <div class="card">
+            <header><h2>Profile & Group</h2></header>
+            <div class="content stack">
+              <div class="field">
+                <label class="muted">Your name</label>
+                <input type="text" value="${escapeAttr(state.me.name)}" data-action="me-name" />
               </div>
-              <div className="space-y-2">
-                {friends.map((f) => (
-                  <div key={f.id} className="flex items-center justify-between rounded-xl border p-2">
-                    <div className="text-sm">{f.name}</div>
-                    <Button size="icon" variant="ghost" onClick={() => setFriends((prev) => prev.filter((x) => x.id !== f.id))}>
-                      <Trash2 className="h-4 w-4"/>
-                    </Button>
-                  </div>
-                ))}
-                {friends.length === 0 && <div className="text-sm text-muted-foreground">No friends added yet.</div>}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Disciplines</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Input placeholder="Add a new discipline (e.g., Fasting)" value={newDisc} onChange={(e) => setNewDisc(e.target.value)} />
-              <Input placeholder="Emoji (optional)" className="w-28" value={newDiscEmoji} onChange={(e) => setNewDiscEmoji(e.target.value)} />
-              <Button onClick={addDisc}><Plus className="h-4 w-4 mr-1"/>Add</Button>
-            </div>
-            <div className="space-y-2">
-              {disciplines.map((d) => (
-                <div key={d.id} className="flex items-center justify-between rounded-xl border p-2">
-                  <div className="text-sm font-medium flex items-center gap-2">
-                    <IconOrEmoji d={d} className="h-4 w-4"/>
-                    {d.name}
-                  </div>
-                  <Button size="icon" variant="ghost" onClick={() => setDisciplines((prev) => prev.filter((x) => x.id !== d.id))}>
-                    <Trash2 className="h-4 w-4"/>
-                  </Button>
+              <hr style="border:none;border-top:1px solid var(--border)">
+              <div class="field">
+                <label class="muted" style="font-weight:600">Friends</label>
+                <div class="row">
+                  <input type="text" placeholder="Add a friend by name" id="friend-input">
+                  <button class="btn" data-action="add-friend">Add</button>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Theme & Appearance</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="text-sm">Dark mode</div>
-              <Switch checked={prefs.darkMode} onCheckedChange={(v) => setPrefs((p) => ({ ...p, darkMode: v }))} />
-            </div>
-            <div>
-              <div className="text-sm mb-2 flex items-center gap-2"><Palette className="h-4 w-4"/> Accent color</div>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(ACCENTS).map(([k, v]) => (
-                  <button
-                    key={k}
-                    onClick={() => setPrefs((p) => ({ ...p, accent: k }))}
-                    className={classNames(
-                      "h-8 w-8 rounded-full border",
-                      prefs.accent === k ? "ring-2 ring-primary" : ""
-                    )}
-                    title={k}
-                    style={{ backgroundColor: v.primary }}
-                  />
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Backup & Data</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-              <Button variant="secondary" onClick={exportData}><Download className="h-4 w-4 mr-2"/> Export JSON</Button>
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importData(e.target.files[0])}/>
-                <span className="inline-flex items-center rounded-md border px-3 py-2 text-sm"><Upload className="h-4 w-4 mr-2"/>Import JSON</span>
-              </label>
-              <Button variant="ghost" onClick={resetAll}><RotateCcw className="h-4 w-4 mr-2"/> Reset all data</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // --- Layout ---
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-slate-100">
-      <div className="max-w-6xl mx-auto p-4 md:p-6">
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <BookOpen className="h-5 w-5"/>
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Daily Rhythms</h1>
-              <p className="text-sm text-muted-foreground">Track Scripture, prayer, and more with friends.</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border p-1">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedDate((d) => subWeeks(d, 1))}>-1w</Button>
-              <div className="px-3 text-sm font-medium">Week of {format(startOfWeekISO(selectedDate), "MMM d, yyyy")}</div>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedDate((d) => addWeeks(d, 1))}>+1w</Button>
-            </div>
-            <div className="flex items-center gap-2">
-              {weekDays.map((d, i) => (
-                <DayPill key={i} day={d} onClick={() => setSelectedDate(d)} />
-              ))}
-            </div>
-            <Button variant="secondary" onClick={() => setSelectedDate(new Date())}>Today</Button>
-            <div className="ml-2 flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={() => setPrefs((p) => ({ ...p, darkMode: !p.darkMode }))} title="Toggle dark mode">
-                {prefs.darkMode ? <Sun className="h-4 w-4"/> : <Moon className="h-4 w-4"/>}
-              </Button>
-              <div className="flex items-center gap-1">
-                {Object.entries(ACCENTS).slice(0,4).map(([k, v]) => (
-                  <button key={k} onClick={() => setPrefs((p) => ({ ...p, accent: k }))} className="h-6 w-6 rounded-full border" title={k} style={{ backgroundColor: v.primary }} />
-                ))}
+                <div class="stack">
+                  ${state.friends.map(f=>`<div class="row card" style="padding:8px 10px; justify-content:space-between"><div>${f.name}</div><button class="btn icon ghost" data-action="remove-friend" data-id="${f.id}">🗑️</button></div>`).join('')}
+                  ${state.friends.length===0? `<div class="muted">No friends added yet.</div>`:''}
+                </div>
               </div>
             </div>
           </div>
-        </header>
 
-        <nav className="flex items-center gap-2 mb-4">
-          <TabButton active={activeTab === "today"} onClick={() => setActiveTab("today")}>Today</TabButton>
-          <TabButton active={activeTab === "week"} onClick={() => setActiveTab("week")}>Week</TabButton>
-          <TabButton active={activeTab === "feed"} onClick={() => setActiveTab("feed")}>Feed</TabButton>
-          <TabButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")}>Settings</TabButton>
-        </nav>
+          <div class="card">
+            <header><h2>Disciplines</h2></header>
+            <div class="content stack">
+              <div class="row">
+                <input type="text" placeholder="Add a new discipline (e.g., Fasting)" id="disc-input">
+                <input type="text" placeholder="Emoji (optional)" id="disc-emoji" style="width:120px">
+                <button class="btn" data-action="add-disc">Add</button>
+              </div>
+              <div class="stack">
+                ${state.disciplines.map(d=>`<div class="row card" style="padding:8px 10px; justify-content:space-between"><div class="row" style="gap:8px"><span>${d.emoji||'🎯'}</span>${d.name}</div><button class="btn icon ghost" data-action="remove-disc" data-id="${d.id}">🗑️</button></div>`).join('')}
+              </div>
+            </div>
+          </div>
 
-        <main className="space-y-4">
-          <AnimatePresence mode="wait">
-            {activeTab === "today" && (
-              <motion.div key="today" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-                <TodayView />
-              </motion.div>
-            )}
-            {activeTab === "week" && (
-              <motion.div key="week" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-                <WeekView />
-              </motion.div>
-            )}
-            {activeTab === "feed" && (
-              <motion.div key="feed" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-                <FeedView />
-              </motion.div>
-            )}
-            {activeTab === "settings" && (
-              <motion.div key="settings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-                <SettingsView />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </main>
+          <div class="card" style="grid-column:1/-1">
+            <header><h2>Theme & Data</h2></header>
+            <div class="content stack">
+              <div class="row" style="justify-content:space-between">
+                <div>Dark mode</div>
+                <label class="row" style="gap:6px"><input type="checkbox" ${state.prefs.dark? 'checked':''} data-action="toggle-dark"> Dark</label>
+              </div>
+              <div>
+                <div class="muted" style="margin-bottom:6px">Accent color</div>
+                <div class="row">
+                  ${Object.entries(ACCENTS).map(([k,v])=>`<span class="dot ${state.prefs.accent===k?'active':''}" style="background:${v}" data-action="accent" data-accent="${k}"></span>`).join('')}
+                </div>
+              </div>
+              <div class="row">
+                <button class="btn" data-action="export">Export JSON</button>
+                <label class="btn" style="cursor:pointer">
+                  <input type="file" accept="application/json" id="import-file">
+                  Import JSON
+                </label>
+                <button class="btn ghost" data-action="reset">Reset all data</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
 
-        <footer className="mt-10 text-xs text-center text-muted-foreground">
-          Built for small groups and friends. Your data stays in your browser.
-        </footer>
-      </div>
-    </div>
-  );
-}
+      const main = state.activeTab==='today'? today : state.activeTab==='week'? week : state.activeTab==='feed'? feed : settings;
 
-function TabButton({ active, children, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={classNames(
-        "px-4 py-2 rounded-xl border text-sm transition-all",
-        active ? "bg-primary text-primary-foreground border-primary" : "bg-white dark:bg-slate-800 hover:bg-muted"
-      )}
-    >
-      {children}
-    </button>
-  );
-}
+      document.getElementById('app').innerHTML = header + tabs + main + '<footer class="muted" style="margin-top:20px;text-align:center;font-size:12px">Built for small groups and friends. Your data stays in your browser.</footer>';
+
+      // wire import
+      const importEl = document.getElementById('import-file');
+      if(importEl){ importEl.onchange = (e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload = ()=>{ try{ const data=JSON.parse(r.result); state = Object.assign({}, state, data); render(); }catch{ alert('Import failed. Invalid file.'); } }; r.readAsText(f); } }
+
+      // focus helpers
+      const friendInput = document.getElementById('friend-input');
+      if(friendInput){ friendInput.onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); document.querySelector('[data-action="add-friend"]').click(); } } };
+      const discInput = document.getElementById('disc-input');
+      if(discInput){ discInput.onkeydown = (e)=>{ if(e.key==='Enter'){ e.preventDefault(); document.querySelector('[data-action="add-disc"]').click(); } } };
+    }
+
+    function commentsBlock(dId, dk){
+      const list = state.comments[`${dId}__${dk}`] || [];
+      return `
+        <div style="margin-top:12px">
+          <div class="row" style="gap:6px; align-items:center; font-size:14px"><span>💬</span><strong>Comments</strong></div>
+          <div class="stack" style="margin-top:8px">
+            ${list.map(c=>`<div class="comment"><div class="row" style="justify-content:space-between"><div style="font-weight:600;font-size:14px">${c.userName}</div><div class="meta">${new Date(c.ts).toLocaleString()}</div></div><div style="margin-top:4px;white-space:pre-wrap">${escapeHtml(c.text)}</div><div class="row" style="gap:8px; margin-top:6px"><button class="btn ghost" data-action="like" data-disc="${dId}" data-day="${dk}" data-id="${c.id}">❤️ ${c.likes||0}</button>${c.userId==='me'? `<button class="btn ghost" data-action="del-comment" data-disc="${dId}" data-day="${dk}" data-id="${c.id}">🗑️ Delete</button>`:''}</div></div>`).join('')}
+          </div>
+          <div class="row" style="gap:8px; margin-top:8px">
+            <textarea placeholder="Share a reflection, prayer request, or encouragement…" id="comment-${dId}-${dk}"></textarea>
+            <button class="btn" data-action="post" data-disc="${dId}" data-day="${dk}">Post</button>
+          </div>
+        </div>`;
+    }
+
+    function feedItems(){
+      return Object.entries(state.comments).flatMap(([key, list])=> list.map(c=>({key, ...c}))).sort((a,b)=> new Date(b.ts) - new Date(a.ts));
+    }
+
+    function escapeHtml(s=''){ return s.replace(/[&<>"]g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+    function escapeAttr(s=''){ return (''+s).replace(/"/g,'&quot;'); }
+
+    // ===== Events (delegated) =====
+    document.addEventListener('click', (e)=>{
+      const el = e.target.closest('[data-action]'); if(!el) return;
+      const act = el.dataset.action;
+      if(act==='shift-week'){
+        const delta = Number(el.dataset.delta)||0; state.selected = addWeeks(new Date(state.selected), delta); render();
+      } else if(act==='select-day'){
+        state.selected = new Date(el.dataset.date); render();
+      } else if(act==='today'){
+        state.selected = new Date(); render();
+      } else if(act==='tab'){
+        state.activeTab = el.dataset.tab; render();
+      } else if(act==='toggle'){
+        const {user, disc, day, rhythm} = el.dataset;
+        const e0 = getEntry(user, disc, day); e0[rhythm] = !e0[rhythm]; setEntry(user,disc,day,e0); render();
+      } else if(act==='only-me'){
+        state.onlyMe = !state.onlyMe; render();
+      } else if(act==='post'){
+        const {disc, day} = el.dataset; const ta = document.getElementById(`comment-${disc}-${day}`);
+        const text = (ta?.value||'').trim(); if(!text) return; const key = `${disc}__${day}`;
+        const c = { id: Date.now()+"_"+Math.random().toString(36).slice(2,7), userId: state.me.id, userName: state.me.name, text, ts: new Date().toISOString(), likes:0 };
+        state.comments[key] = [...(state.comments[key]||[]), c]; ta.value=''; render();
+      } else if(act==='like'){
+        const {disc, day, id} = el.dataset; const key = `${disc}__${day}`;
+        state.comments[key] = (state.comments[key]||[]).map(c=> c.id===id? {...c, likes:(c.likes||0)+1}: c); render();
+      } else if(act==='del-comment'){
+        const {disc, day, id} = el.dataset; const key = `${disc}__${day}`;
+        state.comments[key] = (state.comments[key]||[]).filter(c=> c.id!==id); render();
+      } else if(act==='add-friend'){
+        const input = document.getElementById('friend-input'); const name = (input?.value||'').trim(); if(!name) return;
+        state.friends.push({ id: name.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'-'+Math.random().toString(36).slice(2,5), name }); input.value=''; render();
+      } else if(act==='remove-friend'){
+        const id = el.dataset.id; state.friends = state.friends.filter(f=> f.id!==id); render();
+      } else if(act==='add-disc'){
+        const nameEl = document.getElementById('disc-input'); const emojiEl = document.getElementById('disc-emoji');
+        const name = (nameEl?.value||'').trim(); if(!name) return; const emoji=(emojiEl?.value||'').trim();
+        const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'-'); state.disciplines = [{ id, name, ...(emoji? {emoji}:{}) }, ...state.disciplines]; nameEl.value=''; emojiEl.value=''; render();
+      } else if(act==='remove-disc'){
+        const id = el.dataset.id; state.disciplines = state.disciplines.filter(d=> d.id!==id); render();
+      } else if(act==='export'){
+        const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`spiritual-tracker-export-${dayKey(new Date())}.json`; a.click(); URL.revokeObjectURL(url);
+      } else if(act==='reset'){
+        if(confirm('Reset everything? This clears your data on this device.')){ state = deepClone(initial); render(); }
+      } else if(act==='toggle-dark'){
+        state.prefs.dark = !state.prefs.dark; render();
+      } else if(act==='accent'){
+        state.prefs.accent = el.dataset.accent || 'indigo'; render();
+      }
+    });
+
+    document.addEventListener('input', (e)=>{
+      const el = e.target.closest('[data-action]'); if(!el) return;
+      if(el.dataset.action==='note'){
+        const {user, disc, day, rhythm} = el.dataset; const val = el.value;
+        const prev = getEntry(user, disc, day); setEntry(user,disc,day, { notes: {[rhythm]: val} }); save(state); // live save
+      } else if(el.dataset.action==='me-name'){
+        state.me.name = el.value; save(state);
+      }
+    });
+
+    // init
+    render();
+  </script>
+</body>
+</html>
